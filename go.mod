@@ -1,4 +1,4 @@
-module github.com/cycIones/go-kit
+module github.com/cyc1ones/go-kit
 
 go 1.25.3
 
