@@ -7,11 +7,14 @@ import (
 	"sync"
 
 	"github.com/go-kratos/kratos/v2/log"
+	"github.com/go-kratos/kratos/v2/transport"
 )
 
 var (
 	ErrBackgroundIsRunning = errors.New("background is running")
 )
+
+var _ transport.Server = (*Background)(nil)
 
 type Task func(ctx context.Context)
 
@@ -104,6 +107,17 @@ func (b *Background) Shutdown(ctx context.Context) error {
 	case <-done:
 		return nil
 	}
+}
+
+// Start implements [transport.Server].
+func (b *Background) Start(ctx context.Context) error {
+	b.Launch(ctx)
+	return nil
+}
+
+// Stop implements [transport.Server].
+func (b *Background) Stop(ctx context.Context) error {
+	return b.Shutdown(ctx)
 }
 
 // noPanic executes the given task, suppresses any panic it raises,
