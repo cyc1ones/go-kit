@@ -4,6 +4,7 @@ go 1.25.3
 
 require (
 	github.com/DATA-DOG/go-sqlmock v1.5.2
+	github.com/go-kratos/kratos/v2 v2.8.4
 	github.com/jinzhu/copier v0.4.0
 	github.com/stretchr/testify v1.11.1
 	github.com/unkmonster/go-kit v0.6.0
