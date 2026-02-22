@@ -73,6 +73,18 @@ func WithMakeOperation(f MakeOperationFunc) Option {
 	}
 }
 
+func WithOutgoingRequestMiddlewares(m ...OutgoingRequestMiddleware) Option {
+	return func(r *ReverseProxy) {
+		r.outgoingRequestChain = OutgoingRequestChain(m...)
+	}
+}
+
+func WithUpstreamResponseMiddleware(m ...UpstreamResponseMiddleware) Option {
+	return func(r *ReverseProxy) {
+		r.upstreamResponseChain = UpstreamResponseChain(m...)
+	}
+}
+
 type ReverseProxy struct {
 	proxy  *httputil.ReverseProxy
 	router *router
@@ -86,6 +98,9 @@ type ReverseProxy struct {
 
 	fixCookieDomain  bool
 	fixRequestHeader bool
+
+	outgoingRequestChain  OutgoingRequestMiddleware
+	upstreamResponseChain UpstreamResponseMiddleware
 }
 
 func New(opts ...Option) *ReverseProxy {
@@ -146,6 +161,9 @@ func (rp *ReverseProxy) rewrite(pr *httputil.ProxyRequest) {
 	// match and call handler
 	handler := rp.router.MatchOutgoingRequestHandler(operation)
 	if handler != nil {
+		if rp.outgoingRequestChain != nil {
+			handler = rp.outgoingRequestChain(handler)
+		}
 		rv, err := handler(ctx, pr.Out)
 		if err != nil {
 			pr.Out = nil
@@ -191,6 +209,9 @@ func (rp *ReverseProxy) modifyResponse(resp *http.Response) error {
 	// match and call handler
 	handler := rp.router.MatchUpstreamResponseHandler(tr.Operation)
 	if handler != nil {
+		if rp.upstreamResponseChain != nil {
+			handler = rp.upstreamResponseChain(handler)
+		}
 		rv, err := handler(ctx, resp)
 		if err != nil {
 			return err
