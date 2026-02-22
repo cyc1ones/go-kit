@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
@@ -172,7 +173,17 @@ func (rp *ReverseProxy) modifyResponse(resp *http.Response) error {
 
 	// fix cookie domain
 	if rp.fixCookieDomain {
-		if err := fixCookieDomain(resp, "", tr.IncomingRequest.URL.Hostname()); err != nil {
+		host := tr.IncomingRequest.Host
+		if h, _, err := net.SplitHostPort(host); err == nil {
+			host = h
+		} else {
+			rp.log.WithContext(ctx).Warnw(
+				"msg", "failed to split host port",
+				"reason", err,
+				"host_header", host,
+			)
+		}
+		if err := fixCookieDomain(resp, "", host); err != nil {
 			rp.log.WithContext(ctx).Warnf("failed to fix cookie domain: %v", err)
 		}
 	}
