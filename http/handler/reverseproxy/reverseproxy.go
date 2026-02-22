@@ -16,6 +16,8 @@ import (
 	kratoshttp "github.com/go-kratos/kratos/v2/transport/http"
 )
 
+var debug = true
+
 var (
 	ErrRequestPrevented = errors.New("request prevented")
 )
@@ -30,7 +32,7 @@ type Option func(r *ReverseProxy)
 
 func WithTransport(t http.RoundTripper) Option {
 	return func(r *ReverseProxy) {
-		r.proxy.Transport = &TransportWrapper{t}
+		r.proxy.Transport = &transportWrapper{t}
 	}
 }
 
@@ -58,19 +60,25 @@ func WithFixRequestHeader(b bool) Option {
 	}
 }
 
-func WithNodeBuilder(b selector.WeightedNodeBuilder) Option {
+func WithHandleError(f ErrorHandlerFunc) Option {
 	return func(r *ReverseProxy) {
-		r.nodeBuilder = b
+		r.handleError = f
+	}
+}
+
+func WithMakeOperation(f MakeOperationFunc) Option {
+	return func(r *ReverseProxy) {
+		r.makeOperation = f
 	}
 }
 
 type ReverseProxy struct {
-	proxy *httputil.ReverseProxy
+	proxy  *httputil.ReverseProxy
+	router *router
 
 	log *log.Helper
 
-	selector    selector.Selector
-	nodeBuilder selector.WeightedNodeBuilder
+	selector selector.Selector
 
 	handleError   ErrorHandlerFunc
 	makeOperation MakeOperationFunc
@@ -81,16 +89,18 @@ type ReverseProxy struct {
 
 func New(opts ...Option) *ReverseProxy {
 	handler := &ReverseProxy{
-		log:      buildHelper(log.DefaultLogger),
-		selector: wrr.New(),
-		nodeBuilder: &ewma.Builder{
-			ErrHandler: func(err error) (isErr bool) { return true },
-		},
+		log: buildHelper(log.DefaultLogger),
+		selector: (&selector.DefaultBuilder{
+			Node:     &ewma.Builder{},
+			Balancer: &wrr.Builder{},
+		}).Build(),
 		handleError:   kratoshttp.DefaultErrorEncoder,
 		makeOperation: defaultMakeOperation,
 
 		fixCookieDomain:  true,
 		fixRequestHeader: true,
+
+		router: newRouter(),
 	}
 	proxy := &httputil.ReverseProxy{
 		Transport:      http.DefaultTransport,
@@ -119,8 +129,8 @@ func (rp *ReverseProxy) rewrite(pr *httputil.ProxyRequest) {
 	}
 
 	var (
-		upstream = tr.Upstream
-		//operation = tr.Operation
+		upstream  = tr.Upstream
+		operation = tr.Operation
 	)
 
 	pr.SetURL(upstream)
@@ -131,7 +141,22 @@ func (rp *ReverseProxy) rewrite(pr *httputil.ProxyRequest) {
 		pr.Out.Header.Set("Origin", upstream.String())
 		pr.Out.Header.Set("Referer", strings.TrimSuffix(upstream.String(), "/")+"/")
 	}
-	// TODO: match and call handler
+
+	// match and call handler
+	handler := rp.router.MatchOutgoingRequestHandler(operation)
+	if handler != nil {
+		rv, err := handler(ctx, pr.Out)
+		if err != nil {
+			pr.Out = nil
+			rp.log.WithContext(ctx).Warnw(
+				"msg", "failed to handle outgoing request",
+				"reason", err,
+				"operation", operation,
+			)
+			return
+		}
+		pr.Out = rv
+	}
 }
 
 // modifyResponse will be registered to httputil.ReverseProxy
@@ -152,7 +177,15 @@ func (rp *ReverseProxy) modifyResponse(resp *http.Response) error {
 		}
 	}
 
-	// TODO: match and call handler
+	// match and call handler
+	handler := rp.router.MatchUpstreamResponseHandler(tr.Operation)
+	if handler != nil {
+		rv, err := handler(ctx, resp)
+		if err != nil {
+			return err
+		}
+		resp = rv
+	}
 
 	tr.Done(ctx, selector.DoneInfo{
 		BytesSent:     true,
@@ -211,11 +244,16 @@ func (rp *ReverseProxy) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 	}
 	ctx = NewContext(ctx, tr)
 
+	// debug header
+	if debug {
+		rw.Header().Set("X-Upstream", upstream.String())
+	}
+
 	rp.proxy.ServeHTTP(rw, r.WithContext(ctx))
 }
 
 func (rp *ReverseProxy) SetUpstreams(upstreams []string) {
-	rp.selector.Apply(buildNodes(rp.nodeBuilder, upstreams))
+	rp.selector.Apply(buildNodes(upstreams))
 }
 
 func buildHelper(logger log.Logger) *log.Helper {
@@ -227,10 +265,10 @@ func buildUpstream(node selector.Node) (*url.URL, error) {
 	return url.Parse(node.Address())
 }
 
-func buildNodes(builder selector.WeightedNodeBuilder, upstreams []string) []selector.Node {
+func buildNodes(upstreams []string) []selector.Node {
 	nodes := make([]selector.Node, len(upstreams))
 	for i, up := range upstreams {
-		nodes[i] = builder.Build(selector.NewNode("", up, nil))
+		nodes[i] = selector.NewNode("", up, nil)
 	}
 	return nodes
 }

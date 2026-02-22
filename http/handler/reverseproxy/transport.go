@@ -5,13 +5,13 @@ import (
 	"net/http"
 )
 
-var _ http.RoundTripper = (*TransportWrapper)(nil)
+var _ http.RoundTripper = (*transportWrapper)(nil)
 
-type TransportWrapper struct {
+type transportWrapper struct {
 	rt http.RoundTripper
 }
 
-func (t *TransportWrapper) RoundTrip(r *http.Request) (*http.Response, error) {
+func (t *transportWrapper) RoundTrip(r *http.Request) (*http.Response, error) {
 	if r == nil {
 		return nil, ErrRequestPrevented
 	}

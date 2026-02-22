@@ -6,7 +6,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/go-kratos/kratos/v2/selector/node/ewma"
 	"github.com/stretchr/testify/require"
 )
 
@@ -66,7 +65,7 @@ func TestBuildNodeAndUpstream(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(fmt.Sprintf("%+v", tt), func(t *testing.T) {
-			nodes := buildNodes(&ewma.Builder{}, []string{tt.upstream})
+			nodes := buildNodes([]string{tt.upstream})
 			node := nodes[0]
 
 			upstream, err := buildUpstream(node)
@@ -77,7 +76,7 @@ func TestBuildNodeAndUpstream(t *testing.T) {
 }
 
 func TestTransportWrapper(t *testing.T) {
-	tr := TransportWrapper{rt: http.DefaultTransport}
+	tr := transportWrapper{rt: http.DefaultTransport}
 	_, err := tr.RoundTrip(nil)
 	require.ErrorIs(t, ErrRequestPrevented, err)
 }
