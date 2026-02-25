@@ -4,8 +4,8 @@ import (
 	"strconv"
 	"testing"
 
+	"github.com/cyc1ones/go-kit/db/query"
 	"github.com/stretchr/testify/require"
-	"github.com/unkmonster/go-kit/db/query"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )

@@ -3,7 +3,7 @@ package filter
 import (
 	"fmt"
 
-	"github.com/unkmonster/go-kit/db/gormutil/scope"
+	"github.com/cyc1ones/go-kit/db/gorm/scope"
 	"gorm.io/gorm"
 )
 

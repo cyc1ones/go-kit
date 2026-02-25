@@ -3,8 +3,8 @@ package pagination
 import (
 	"strings"
 
-	"github.com/unkmonster/go-kit/db/gormutil/scope"
-	"github.com/unkmonster/go-kit/db/query"
+	"github.com/cyc1ones/go-kit/db/gorm/scope"
+	"github.com/cyc1ones/go-kit/db/query"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
