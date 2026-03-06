@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"net/http/httputil"
@@ -20,6 +21,7 @@ import (
 var debug = true
 
 var (
+	// ErrRequestPrevented returns when RoundTrip if request is nil
 	ErrRequestPrevented = errors.New("request prevented")
 )
 
@@ -27,7 +29,7 @@ var (
 type ErrorHandlerFunc func(rw http.ResponseWriter, r *http.Request, err error)
 
 // MakeOperationFunc should make operation from request
-type MakeOperationFunc func(ctx context.Context, r *http.Request) (string, error)
+type MakeOperationFunc func(ctx context.Context, r *http.Request) string
 
 type Option func(r *ReverseProxy)
 
@@ -107,7 +109,11 @@ func New(opts ...Option) *ReverseProxy {
 	handler := &ReverseProxy{
 		log: buildHelper(log.DefaultLogger),
 		selector: (&selector.DefaultBuilder{
-			Node:     &ewma.Builder{},
+			Node: &ewma.Builder{
+				ErrHandler: func(err error) (isErr bool) {
+					return errors.Is(err, io.EOF)
+				},
+			},
 			Balancer: &wrr.Builder{},
 		}).Build(),
 		handleError:   kratoshttp.DefaultErrorEncoder,
@@ -137,12 +143,7 @@ func (rp *ReverseProxy) rewrite(pr *httputil.ProxyRequest) {
 	ctx := pr.Out.Context()
 
 	// upstream, operation
-	tr, ok := TransporterFromContext(ctx)
-	if !ok {
-		// prevent fetching origin
-		pr.Out = nil
-		return
-	}
+	tr := MustTransporterFromContext(ctx)
 
 	var (
 		upstream  = tr.Upstream
@@ -154,8 +155,9 @@ func (rp *ReverseProxy) rewrite(pr *httputil.ProxyRequest) {
 	pr.Out.Host = upstream.Host
 
 	if rp.fixRequestHeader {
-		pr.Out.Header.Set("Origin", upstream.String())
-		pr.Out.Header.Set("Referer", strings.TrimSuffix(upstream.String(), "/")+"/")
+		origin := upstream.Scheme + "://" + upstream.Host
+		pr.Out.Header.Set("Origin", origin)
+		pr.Out.Header.Set("Referer", origin+"/")
 	}
 
 	// match and call handler
@@ -164,17 +166,13 @@ func (rp *ReverseProxy) rewrite(pr *httputil.ProxyRequest) {
 		if rp.outgoingRequestChain != nil {
 			handler = rp.outgoingRequestChain(handler)
 		}
-		rv, err := handler(ctx, pr.Out)
+		err := handler(ctx, pr.Out)
 		if err != nil {
+			// 如果在 transporter 执行时发现 Error 已被设置，会直接返回这个错误
+			tr.Error = fmt.Errorf("handle outgoing request: %w", err)
 			pr.Out = nil
-			rp.log.WithContext(ctx).Warnw(
-				"msg", "failed to handle outgoing request",
-				"reason", err,
-				"operation", operation,
-			)
 			return
 		}
-		pr.Out = rv
 	}
 }
 
@@ -184,10 +182,9 @@ func (rp *ReverseProxy) rewrite(pr *httputil.ProxyRequest) {
 func (rp *ReverseProxy) modifyResponse(resp *http.Response) error {
 	ctx := resp.Request.Context()
 
-	tr, ok := TransporterFromContext(ctx)
-	if !ok {
-		return errors.New("missing transporter in context")
-	}
+	tr := MustTransporterFromContext(ctx)
+
+	tr.UpstreamStatusCode = resp.StatusCode
 
 	// fix cookie domain
 	if rp.fixCookieDomain {
@@ -212,11 +209,10 @@ func (rp *ReverseProxy) modifyResponse(resp *http.Response) error {
 		if rp.upstreamResponseChain != nil {
 			handler = rp.upstreamResponseChain(handler)
 		}
-		rv, err := handler(ctx, resp)
+		err := handler(ctx, resp)
 		if err != nil {
-			return err
+			return fmt.Errorf("handle upstream response: %w", err)
 		}
-		resp = rv
 	}
 
 	tr.Done(ctx, selector.DoneInfo{
@@ -235,6 +231,7 @@ func (rp *ReverseProxy) errorHandler(rw http.ResponseWriter, r *http.Request, er
 		tr.Done(ctx, selector.DoneInfo{
 			Err: err,
 		})
+		tr.Error = err
 	}
 	rp.handleError(rw, r, err)
 }
@@ -245,35 +242,28 @@ func (rp *ReverseProxy) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 	// select a node and build it as upstream
 	node, done, err := rp.selector.Select(ctx)
 	if err != nil {
-		rp.handleError(rw, r, err)
+		rp.errorHandler(rw, r, fmt.Errorf("select node: %w", err))
 		return
 	}
 	upstream, err := buildUpstream(node)
 	if err != nil {
-		done(ctx, selector.DoneInfo{
-			Err: err,
-		})
-		rp.handleError(rw, r, fmt.Errorf("build upstream: %w", err))
+		rp.errorHandler(rw, r, fmt.Errorf("build upstream: %w", err))
 		return
 	}
 
 	// make operation for current request
-	operation, err := rp.makeOperation(ctx, r)
-	if err != nil {
-		done(ctx, selector.DoneInfo{
-			Err: err,
-		})
-		rp.handleError(rw, r, fmt.Errorf("make operation: %w", err))
-		return
-	}
+	operation := rp.makeOperation(ctx, r)
 
 	// inject the Transporter of current request into context
-	tr := &Transporter{
-		Upstream:        upstream,
-		Operation:       operation,
-		IncomingRequest: r,
-		Done:            done,
+	tr, _ := TransporterFromContext(ctx)
+	if tr == nil {
+		tr = NewTransporter()
 	}
+
+	tr.Upstream = upstream
+	tr.Operation = operation
+	tr.IncomingRequest = r
+	tr.done = done
 	ctx = NewContext(ctx, tr)
 
 	// debug header
@@ -337,6 +327,6 @@ func fixCookieDomain(r *http.Response, from, to string) error {
 }
 
 // defaultMakeOperation extracts URL.Path from given request as operation
-func defaultMakeOperation(ctx context.Context, r *http.Request) (string, error) {
-	return r.URL.Path, nil
+func defaultMakeOperation(ctx context.Context, r *http.Request) string {
+	return r.URL.Path
 }

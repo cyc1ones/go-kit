@@ -7,10 +7,10 @@ import (
 )
 
 // OutgoingRequestHandler should handle outgoing request before it be sent
-type OutgoingRequestHandler func(ctx context.Context, req *http.Request) (*http.Request, error)
+type OutgoingRequestHandler func(ctx context.Context, req *http.Request) error
 
 // UpstreamResponseHandler should handle response from the upstream before it be sent to client
-type UpstreamResponseHandler func(ctx context.Context, resp *http.Response) (*http.Response, error)
+type UpstreamResponseHandler func(ctx context.Context, resp *http.Response) error
 
 type router struct {
 	outgoingRequestHandlers  map[string]OutgoingRequestHandler

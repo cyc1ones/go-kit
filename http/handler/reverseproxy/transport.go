@@ -12,6 +12,11 @@ type transportWrapper struct {
 }
 
 func (t *transportWrapper) RoundTrip(r *http.Request) (*http.Response, error) {
+	tr := MustTransporterFromContext(r.Context())
+
+	if err := tr.Error; err != nil {
+		return nil, fmt.Errorf("request prevented: %w", err)
+	}
 	if r == nil {
 		return nil, ErrRequestPrevented
 	}
