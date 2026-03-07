@@ -169,17 +169,21 @@ func (rp *ReverseProxy) rewrite(pr *httputil.ProxyRequest) {
 
 	// match and call handler
 	handler := rp.router.MatchOutgoingRequestHandler(operation)
-	if handler != nil {
-		if rp.outgoingRequestChain != nil {
-			handler = rp.outgoingRequestChain(handler)
+	if handler == nil {
+		handler = func(ctx context.Context, req *http.Request) error {
+			return nil
 		}
-		err := handler(ctx, pr.Out)
-		if err != nil {
-			// 如果在 transporter 执行时发现 Error 已被设置，会直接返回这个错误
-			tr.Error = fmt.Errorf("handle outgoing request: %w", err)
-			pr.Out = nil
-			return
-		}
+	}
+
+	if rp.outgoingRequestChain != nil {
+		handler = rp.outgoingRequestChain(handler)
+	}
+	err := handler(ctx, pr.Out)
+	if err != nil {
+		// 如果在 transporter 执行时发现 Error 已被设置，会直接返回这个错误
+		tr.Error = fmt.Errorf("handle outgoing request: %w", err)
+		pr.Out = nil
+		return
 	}
 
 	if Debug {
@@ -234,14 +238,17 @@ func (rp *ReverseProxy) modifyResponse(resp *http.Response) error {
 
 	// match and call handler
 	handler := rp.router.MatchUpstreamResponseHandler(tr.Operation)
-	if handler != nil {
-		if rp.upstreamResponseChain != nil {
-			handler = rp.upstreamResponseChain(handler)
+	if handler == nil {
+		handler = func(ctx context.Context, resp *http.Response) error {
+			return nil
 		}
-		err := handler(ctx, resp)
-		if err != nil {
-			return fmt.Errorf("handle upstream response: %w", err)
-		}
+	}
+	if rp.upstreamResponseChain != nil {
+		handler = rp.upstreamResponseChain(handler)
+	}
+	err := handler(ctx, resp)
+	if err != nil {
+		return fmt.Errorf("handle upstream response: %w", err)
 	}
 
 	if Debug {
