@@ -87,9 +87,15 @@ func WithUpstreamResponseMiddleware(m ...UpstreamResponseMiddleware) Option {
 	}
 }
 
+func WithRouter(rt Router) Option {
+	return func(r *ReverseProxy) {
+		r.router = rt
+	}
+}
+
 type ReverseProxy struct {
 	proxy  *httputil.ReverseProxy
-	router *router
+	router Router
 
 	log *log.Helper
 
@@ -122,7 +128,7 @@ func New(opts ...Option) *ReverseProxy {
 		fixCookieDomain:  true,
 		fixRequestHeader: true,
 
-		router: newRouter(),
+		router: NewRouter(),
 	}
 	proxy := &httputil.ReverseProxy{
 		Transport:      http.DefaultTransport,

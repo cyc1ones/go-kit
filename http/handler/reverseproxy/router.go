@@ -6,6 +6,13 @@ import (
 	"strings"
 )
 
+type Router interface {
+	MatchOutgoingRequestHandler(operation string) OutgoingRequestHandler
+	MatchUpstreamResponseHandler(operation string) UpstreamResponseHandler
+	HandleOutgoingRequest(operation string, h OutgoingRequestHandler)
+	HandleUpstreamResponse(operation string, handler UpstreamResponseHandler)
+}
+
 // OutgoingRequestHandler should handle outgoing request before it be sent
 type OutgoingRequestHandler func(ctx context.Context, req *http.Request) error
 
@@ -17,7 +24,7 @@ type router struct {
 	upstreamResponseHandlers map[string]UpstreamResponseHandler
 }
 
-func newRouter() *router {
+func NewRouter() *router {
 	return &router{
 		outgoingRequestHandlers:  make(map[string]OutgoingRequestHandler),
 		upstreamResponseHandlers: make(map[string]UpstreamResponseHandler),

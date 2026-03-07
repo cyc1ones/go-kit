@@ -10,7 +10,7 @@ import (
 
 func TestRouter(t *testing.T) {
 	testOperation := "login"
-	r := newRouter()
+	r := NewRouter()
 
 	r.HandleOutgoingRequest(testOperation, func(ctx context.Context, req *http.Request) error {
 		return nil
