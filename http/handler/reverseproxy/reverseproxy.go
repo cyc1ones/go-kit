@@ -19,6 +19,7 @@ import (
 )
 
 var debug = true
+var Debug = true
 
 var (
 	// ErrRequestPrevented returns when RoundTrip if request is nil
@@ -180,6 +181,17 @@ func (rp *ReverseProxy) rewrite(pr *httputil.ProxyRequest) {
 			return
 		}
 	}
+
+	if Debug {
+		d, err := httputil.DumpRequest(pr.Out, true)
+		if err != nil {
+			rp.log.Warnf("failed to dump outgoing request: %v", err)
+		} else {
+			rp.log.WithContext(ctx).Debugw(
+				"request to be sent", string(d),
+			)
+		}
+	}
 }
 
 // modifyResponse will be registered to httputil.ReverseProxy
@@ -191,6 +203,17 @@ func (rp *ReverseProxy) modifyResponse(resp *http.Response) error {
 	tr := MustTransporterFromContext(ctx)
 
 	tr.UpstreamStatusCode = resp.StatusCode
+
+	if Debug {
+		d, err := httputil.DumpResponse(resp, true)
+		if err != nil {
+			rp.log.WithContext(ctx).Warnf("failed to dump response from upstream: %v", err)
+		} else {
+			rp.log.WithContext(ctx).Debugw(
+				"response from upstream", string(d),
+			)
+		}
+	}
 
 	// fix cookie domain
 	if rp.fixCookieDomain {
@@ -218,6 +241,17 @@ func (rp *ReverseProxy) modifyResponse(resp *http.Response) error {
 		err := handler(ctx, resp)
 		if err != nil {
 			return fmt.Errorf("handle upstream response: %w", err)
+		}
+	}
+
+	if Debug {
+		d, err := httputil.DumpResponse(resp, true)
+		if err != nil {
+			rp.log.WithContext(ctx).Warnf("failed to dump response to be sent: %v", err)
+		} else {
+			rp.log.WithContext(ctx).Debugw(
+				"response to be sent", string(d),
+			)
 		}
 	}
 
