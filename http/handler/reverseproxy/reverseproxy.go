@@ -180,9 +180,9 @@ func (rp *ReverseProxy) rewrite(pr *httputil.ProxyRequest) {
 	}
 	err := handler(ctx, pr.Out)
 	if err != nil {
-		// 如果在 transporter 执行时发现 Error 已被设置，会直接返回这个错误
+		// 这里通过 transportWrapper 传播错误至 errorHandler 处理
+		// 如果在 transportWrapper 执行 RoundTrip 时发现 Error 已被设置，会直接返回这个错误
 		tr.Error = fmt.Errorf("handle outgoing request: %w", err)
-		pr.Out = nil
 		return
 	}
 
