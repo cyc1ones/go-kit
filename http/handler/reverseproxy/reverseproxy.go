@@ -16,6 +16,7 @@ import (
 	"github.com/go-kratos/kratos/v2/selector/node/ewma"
 	"github.com/go-kratos/kratos/v2/selector/wrr"
 	kratoshttp "github.com/go-kratos/kratos/v2/transport/http"
+	"github.com/google/uuid"
 )
 
 var debug = true
@@ -311,6 +312,7 @@ func (rp *ReverseProxy) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 	tr.Operation = operation
 	tr.IncomingRequest = r
 	tr.done = done
+	tr.requestID = uuid.NewString()
 	ctx = NewContext(ctx, tr)
 
 	// debug header

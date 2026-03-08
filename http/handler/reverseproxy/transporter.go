@@ -17,9 +17,10 @@ type Transporter struct {
 	UpstreamStatusCode int
 	Error              error
 
-	done     selector.DoneFunc
-	record   *sync.Map
-	doneOnce *sync.Once
+	requestID string
+	done      selector.DoneFunc
+	record    *sync.Map
+	doneOnce  *sync.Once
 }
 
 func NewTransporter() *Transporter {
@@ -33,6 +34,10 @@ func (t *Transporter) Done(ctx context.Context, di selector.DoneInfo) {
 	t.doneOnce.Do(func() {
 		t.done(ctx, di)
 	})
+}
+
+func (t *Transporter) RequestID() string {
+	return t.requestID
 }
 
 type transporterKey struct{}
