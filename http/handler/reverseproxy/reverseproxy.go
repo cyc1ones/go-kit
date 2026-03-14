@@ -133,7 +133,7 @@ func New(opts ...Option) *ReverseProxy {
 		router: NewRouter(),
 	}
 	proxy := &httputil.ReverseProxy{
-		Transport:      http.DefaultTransport,
+		Transport:      &transportWrapper{rt: http.DefaultTransport},
 		Rewrite:        handler.rewrite,
 		ModifyResponse: handler.modifyResponse,
 		ErrorHandler:   handler.errorHandler,
