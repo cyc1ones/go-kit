@@ -135,7 +135,7 @@ func noPanic(ctx context.Context, t Task) (p any, stk string) {
 }
 
 func newHelper(logger log.Logger) *log.Helper {
-	return log.NewHelper(log.With(logger, "module", "background"))
+	return log.NewHelper(log.With(logger, "component", "background"))
 }
 
 type Option func(s *Background)

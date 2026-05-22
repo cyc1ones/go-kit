@@ -13,6 +13,7 @@ type Transporter struct {
 	Upstream        *url.URL
 	Operation       string
 	IncomingRequest *http.Request
+	OutgoingRequest *http.Request
 
 	UpstreamStatusCode int
 	Error              error

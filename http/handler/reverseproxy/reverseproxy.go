@@ -27,7 +27,7 @@ var (
 	ErrRequestPrevented = errors.New("request prevented")
 )
 
-// ErrorHandlerFunc should handler a error during request
+// ErrorHandlerFunc should handle a error during request
 type ErrorHandlerFunc func(rw http.ResponseWriter, r *http.Request, err error)
 
 // MakeOperationFunc should make operation from request
@@ -107,7 +107,7 @@ type ReverseProxy struct {
 	makeOperation MakeOperationFunc
 
 	fixCookieDomain  bool
-	fixRequestHeader bool
+	fixRequestHeader bool // 是否根据 upstream 设置出站请求的 origin, referer
 
 	outgoingRequestChain  OutgoingRequestMiddleware
 	upstreamResponseChain UpstreamResponseMiddleware
@@ -152,6 +152,7 @@ func (rp *ReverseProxy) rewrite(pr *httputil.ProxyRequest) {
 
 	// upstream, operation
 	tr := MustTransporterFromContext(ctx)
+	tr.OutgoingRequest = pr.Out
 
 	var (
 		upstream  = tr.Upstream
