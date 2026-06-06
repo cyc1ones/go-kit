@@ -33,7 +33,9 @@ func NewTransporter() *Transporter {
 
 func (t *Transporter) Done(ctx context.Context, di selector.DoneInfo) {
 	t.doneOnce.Do(func() {
-		t.done(ctx, di)
+		if t.done != nil {
+			t.done(ctx, di)
+		}
 	})
 }
 
