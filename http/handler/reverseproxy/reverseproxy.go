@@ -209,6 +209,7 @@ func (rp *ReverseProxy) modifyResponse(resp *http.Response) error {
 	tr := MustTransporterFromContext(ctx)
 
 	tr.UpstreamStatusCode = resp.StatusCode
+	tr.Response = resp
 
 	if Debug {
 		d, err := httputil.DumpResponse(resp, true)
