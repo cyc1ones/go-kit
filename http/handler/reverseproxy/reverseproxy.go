@@ -291,6 +291,13 @@ func (rp *ReverseProxy) errorHandler(rw http.ResponseWriter, r *http.Request, er
 func (rp *ReverseProxy) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
+	// inject transporter if needed
+	tr, _ := TransporterFromContext(ctx)
+	if tr == nil {
+		tr = NewTransporter()
+		ctx = NewContext(ctx, tr)
+	}
+
 	// select a node and build it as upstream
 	node, done, err := rp.selector.Select(ctx)
 	if err != nil {
@@ -306,22 +313,18 @@ func (rp *ReverseProxy) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 	// make operation for current request
 	operation := rp.makeOperation(ctx, r)
 
-	// inject the Transporter of current request into context
-	tr, _ := TransporterFromContext(ctx)
-	if tr == nil {
-		tr = NewTransporter()
-	}
-
 	tr.Upstream = upstream
 	tr.Operation = operation
 	tr.IncomingRequest = r
 	tr.done = done
-	tr.requestID = uuid.NewString()
-	ctx = NewContext(ctx, tr)
+	tr.requestID = r.Header.Get("X-Request-ID")
+	if tr.requestID == "" {
+		tr.requestID = uuid.NewString()
+	}
 
-	// debug header
+	// add debug header
 	if debug {
-		rw.Header().Set("X-Upstream", upstream.String())
+		rw.Header().Set("X-Proxy-Upstream", upstream.String())
 	}
 
 	rp.proxy.ServeHTTP(rw, r.WithContext(ctx))
